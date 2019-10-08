@@ -5,6 +5,7 @@
 # Author: Ben Tilden
 
 import re
+import threading
 from datetime import datetime, timezone
 import requests
 import chrome_bookmarks
@@ -19,27 +20,29 @@ def parseBookmarkList(date):
         if "YouTube" in url.name:
             youtubeUrls[url.name] = url.url
         if (url.added > givenDate.replace(tzinfo=timezone.utc) and 
-        ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
+           ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
             bookmarksSinceDate[url.name] = url.url
     return youtubeUrls, bookmarksSinceDate
 
-def processAlbumsPitchfork(bookmarkTitle, bookmarksSinceDate):
+def getFolderCheck(locationFolder, title):
+    folder = locationFolder.getFolder(title)
+    if folder == None:
+        locationFolder.addFolder(title)
+        folder = locationFolder.getFolder(title)
+    return folder
+
+def processPitchforkAlbum(bookmarkTitle, bookmarksSinceDate):
     albumList = []
-    titleSearch = (re.search('(.+): (.+) Album Review \| Pitchfork',
-                   bookmarkTitle))
+    titleSearch = (re.search(
+        '(.+): (.+) Album Review \| Pitchfork', bookmarkTitle))
     artistName = titleSearch.group(1)
     page = requests.get(bookmarksSinceDate[bookmarkTitle])
     tree = html.fromstring(page.content)
     years = tree.xpath(
-                '//span'
-                '[@class="single-album-tombstone__meta-year"]'
-                '/text()[4]') #TODO: Better formatting
+        '//span[@class="single-album-tombstone__meta-year"]/text()[4]')
     if len(years) > 1:
         albumNames = tree.xpath(
-                    '//h1'
-                    '[@class='
-                    '"single-album-tombstone__review-title"]'
-                    '/text()')
+            '//h1[@class="single-album-tombstone__review-title"]/text()')
         if albumNames != None:
             for x in range(0, len(albumNames)):
                 albumList.append({
@@ -58,9 +61,9 @@ def processAlbumsPitchfork(bookmarkTitle, bookmarksSinceDate):
         })
     return albumList
 
-def processSongsPitchfork(bookmarkTitle, bookmarksSinceDate):
-    titleSearch = (re.search('(“.+”( \[.+\])?) by (.+) Review \| Pitchfork',
-                   bookmarkTitle))
+def processPitchforkSong(bookmarkTitle, bookmarksSinceDate):
+    titleSearch = (re.search(
+        '(“.+”( \[.+\])?) by (.+) Review \| Pitchfork', bookmarkTitle))
     songName = titleSearch.group(1).replace('“', '').replace('”', '')
     artistName = titleSearch.group(3)
     page = requests.get(bookmarksSinceDate[bookmarkTitle])
@@ -72,100 +75,95 @@ def processSongsPitchfork(bookmarkTitle, bookmarksSinceDate):
     }
     return songElement
 
-def processAlbumsTMT(bookmarkTitle, bookmarksSinceDate):
-    titleSearch = (re.search('(.+) - (.+) \| Music Review \| Tiny Mix\xa0Tapes',
-                   bookmarkTitle))
+def processTMTAlbum(bookmarkTitle, bookmarksSinceDate):
+    titleSearch = (re.search(
+        '(.+) - (.+) \| Music Review \| Tiny Mix\xa0Tapes', bookmarkTitle))
     artistName = titleSearch.group(1)
     albumName = titleSearch.group(2)
     page = requests.get(bookmarksSinceDate[bookmarkTitle])
     tree = html.fromstring(page.content)
     years = tree.xpath(
-                '//p'
-                '[@class="meta"]'
-                '/text()') #TODO: Better formatting
+        '//p[@class="meta"]/text()')
+    yearName = re.search('.+; (.+)]', years[0]).group(1)
     albumElement = {
         "type": "album",
         "artist": artistName,
         "title": albumName,
-        "year": re.search('.+; (.+)]', years[0]).group(1)
+        "year": yearName
     }
     return albumElement
 
+def processPitchfork(bookmarkTitle, bookmarksSinceDate, temp):
+    if "Album Review" in bookmarkTitle:
+            return processPitchforkAlbum(bookmarkTitle, bookmarksSinceDate)
+        # temp.getBookmark(bookmarkTitle).delete() #TODO: uncomment all delete
+    elif "Review" in bookmarkTitle:
+            return processPitchforkSong(bookmarkTitle, bookmarksSinceDate)
+        # temp.getBookmark(bookmarkTitle).delete()
+    else:
+        discoveryMusic = getFolderCheck(temp, 'Discovery (Music)')
+        discoveryMusic.addBookmark(
+            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
+        # temp.getBookmark(bookmarkTitle).delete()
+
+def processTMT(bookmarkTitle, bookmarksSinceDate, tmtReviews, temp):
+    if "Music Review" in bookmarkTitle:
+        tmtReviews.addBookmark(
+            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
+        return processTMTAlbum(bookmarkTitle, bookmarksSinceDate)
+        # temp.getBookmark(bookmarkTitle).delete()
+    else:
+        discoveryMusic = getFolderCheck(temp, 'Discovery (Music)')
+        discoveryMusic.addBookmark(
+            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
+        # temp.getBookmark(bookmarkTitle).delete()
+
+def processYouTube(bookmarkTitle, youtubeUrls, temp):
+    youtubeFolder = getFolderCheck(temp, 'YouTube') #TODO: look into adding this to ChromeBookmarkEditor
+    youtubeFolder.addBookmark(bookmarkTitle, youtubeUrls[bookmarkTitle])
+    # temp.getBookmark(bookmarkTitle).delete()
+
+def processBookmarkThread(bookmarkTitle, bookmarksSinceDate, youtubeUrls, temp, tmtReviews):
+    if "Pitchfork" in bookmarkTitle:
+        return processPitchfork(bookmarkTitle, bookmarksSinceDate, temp)
+    elif "Tiny Mix\xa0Tapes" in bookmarkTitle:
+        return processTMT(bookmarkTitle, bookmarksSinceDate, tmtReviews, temp)
+    elif "YouTube" in bookmarkTitle:
+        processYouTube(bookmarkTitle, youtubeUrls, temp)
+
 def bookmarkArchiver(year):
-    elementCount = 0
     elementList = []
+    elementNo = 0
     youtubeUrls, bookmarksSinceDate = parseBookmarkList(year)
-    f = open('/Users/bentilden/Library/Mobile Documents/'
-             '27N4MQEA55~pro~writer/Documents/temp.txt', 'a+')
     chrome = Chrome()
     temp = chrome.otherBookmarks.getFolder('temp')
-    youtube = temp.getFolder('YouTube')
-    if youtube == None:
-        temp.addFolder('YouTube')
-        youtube = temp.getFolder('YouTube')
+    tmtReviews = (chrome.otherBookmarks
+            .getFolder('Personal')
+            .getFolder('Culture')
+            .getFolder('Journalism')
+            .getFolder('Articles to Read')
+            .getFolder('TMT Reviews (To Read)'))
     for bookmark in temp.bookmarks:
-        if "Pitchfork" in bookmark.title():
-            if "Album Review" in bookmark.title():
-                elementList.extend(processAlbumsPitchfork(bookmark.title(),
-                                                          bookmarksSinceDate))
-                elementCount += 1
-                print(elementCount)
-                # temp.getBookmark(bookmark.title()).delete()
-            elif "Review" in bookmark.title():
-                elementList.append(processSongsPitchfork(bookmark.title(),
-                                                         bookmarksSinceDate))
-                elementCount += 1
-                print(elementCount)
-                # temp.getBookmark(bookmark.title()).delete()
-            else:
-                discoveryMusic = temp.getFolder('Discovery (Music)')
-                if discoveryMusic == None:
-                    temp.addFolder('Discovery (Music)')
-                    discoveryMusic = temp.getFolder('Discovery (Music)')
-                discoveryMusic.addBookmark(bookmark.title(), 
-                                bookmarksSinceDate[bookmark.title()])
-                elementCount += 1
-                print(elementCount)
-                # temp.getBookmark(bookmark.title()).delete()
-        elif "Tiny Mix\xa0Tapes" in bookmark.title():
-            if "Music Review" in bookmark.title():
-                elementList.append(processAlbumsTMT(bookmark.title(),
-                                                    bookmarksSinceDate))
-                elementCount += 1
-                print(elementCount)
-                tmtReviews = (chrome.otherBookmarks
-                                            .getFolder('Personal')
-                                            .getFolder('Culture')
-                                            .getFolder('Journalism')
-                                            .getFolder('Articles to Read')
-                                            .getFolder('TMT Reviews (To Read)'))
-                tmtReviews.addBookmark(bookmark.title(),
-                                bookmarksSinceDate[bookmark.title()])
-                # temp.getBookmark(bookmark.title()).delete()
-            else:
-                discoveryMusic = temp.getFolder('Discovery (Music)')
-                if discoveryMusic == None:
-                    temp.addFolder('Discovery (Music)')
-                    discoveryMusic = temp.getFolder('Discovery (Music)')
-                discoveryMusic.addBookmark(bookmark.title(), 
-                                bookmarksSinceDate[bookmark.title()])
-                elementCount += 1
-                print(elementCount)
-                # temp.getBookmark(bookmark.title()).delete()
-        elif "YouTube" in bookmark.title():
-            youtube.addBookmark(bookmark.title(), 
-                                youtubeUrls[bookmark.title()])
-            elementCount += 1
-            print(elementCount)
-            # temp.getBookmark(bookmark.title()).delete()
-        else:
-            elementCount += 1
-            print(elementCount)
-    print(len(elementList))
+        element = processBookmarkThread(bookmark.title(), bookmarksSinceDate, youtubeUrls, temp, tmtReviews) #TODO: Look into OOP and minimizing the parameters here
+        if type(element) is list:
+            elementList.extend(element)
+        elif type(element) is dict:
+            elementList.append(element)
+        elementNo += 1
+        print(elementNo)
+        # threads = []
+        # thread = threading.Thread(target=processBookmarkThread, args=(bookmark, bookmarksSinceDate, youtubeUrls))
+        # thread.daemon = True
+        # threads.append(thread)
+        # thread.start()
+        # for x in threads
+        #     x.join()
+        # [x.join() for x in threads]
     print(elementList)
-    for element in elementList:
-        f.write('\t'.join(value for key, value in element.items()) + '\n')
-    f.close()
+    with open('/Users/bentilden/Library/Mobile Documents/'
+             '27N4MQEA55~pro~writer/Documents/temp.txt', 'a+') as f:
+        for element in elementList:
+            f.write('\t'.join(value for key, value in element.items()) + '\n')
 
 if __name__ == "__main__":
     bookmarkArchiver("")
