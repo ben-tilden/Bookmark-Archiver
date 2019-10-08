@@ -4,6 +4,8 @@
 # Objective: Organize bookmarks and add music to ia Writer docs
 # Author: Ben Tilden
 
+#TODO: Add counter for bookmarks to ensure all are addressed
+
 import os
 import re
 import datetime
@@ -20,14 +22,14 @@ def parseBookmarkList(date):
     for url in chrome_bookmarks.urls:
         if "YouTube" in url.name:
             youtubeUrls[url.name] = url.url
-        if (url.added > givenDate.replace(tzinfo=timezone.utc) and
-            "Review" in url.name):
+        if (url.added > givenDate.replace(tzinfo=timezone.utc) and 
+        ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
             bookmarksSinceDate[url.name] = url.url
     return youtubeUrls, bookmarksSinceDate
 
 def processAlbumsPitchfork(bookmarkTitle, bookmarksSinceDate):
     set = {}
-    titleSearch = (re.search('(.+): (.+) Album Review | Pitchfork',
+    titleSearch = (re.search('(.+): (.+) Album Review \| Pitchfork',
                    bookmarkTitle))
     artistName = titleSearch.group(1)
     page = requests.get(bookmarksSinceDate[bookmarkTitle])
@@ -60,11 +62,10 @@ def processAlbumsPitchfork(bookmarkTitle, bookmarksSinceDate):
 
 def processSongsPitchfork(bookmarkTitle, bookmarksSinceDate):
     set = {}
-    print(bookmarkTitle)
-    titleSearch = (re.search('“(.+)” by (.+) Review | Pitchfork',
+    titleSearch = (re.search('(“.+”( \[.+\])?) by (.+) Review \| Pitchfork',
                    bookmarkTitle))
-    songName = titleSearch.group(1)
-    artistName = titleSearch.group(2)
+    songName = titleSearch.group(1).replace('“', '').replace('”', '')
+    artistName = titleSearch.group(3)
     page = requests.get(bookmarksSinceDate[bookmarkTitle])
     tree = html.fromstring(page.content)
     year = tree.xpath(
@@ -74,6 +75,24 @@ def processSongsPitchfork(bookmarkTitle, bookmarksSinceDate):
     set[artistName] = {
         "song": songName,
         "year": year[0]
+    }
+    return set
+
+def processAlbumsTMT(bookmarkTitle, bookmarksSinceDate):
+    set = {}
+    titleSearch = (re.search('(.+) - (.+) \| Music Review \| Tiny Mix\xa0Tapes',
+                   bookmarkTitle))
+    artistName = titleSearch.group(1)
+    albumName = titleSearch.group(2)
+    page = requests.get(bookmarksSinceDate[bookmarkTitle])
+    tree = html.fromstring(page.content)
+    years = tree.xpath(
+                '//p'
+                '[@class="meta"]'
+                '/text()') #TODO: Better formatting
+    set[artistName] = {
+        "album": albumName,
+        "year": re.search('.+; (.+)', years[0]).group(1)
     }
     return set
 
@@ -97,15 +116,17 @@ def bookmarkArchiver(year):
                 print(processSongsPitchfork(bookmark.title(), bookmarksSinceDate))
                 # Add to music to keep in mind *year* or just notify
                 # temp.getBookmark(bookmark.title()).delete()
-            elif "Listen | Pitchfork" in bookmark.title():
-                pass
             else:
-                pass
-                # Add to articles to read / music discovery(?)
+                discoveryMusic = temp.getFolder('Discovery (Music)')
+                if discoveryMusic == None:
+                    temp.addFolder('Discovery (Music)')
+                    discoveryMusic = temp.getFolder('Discovery (Music)')
+                discoveryMusic.addBookmark(bookmark.title(), 
+                                bookmarksSinceDate[bookmark.title()])
+                # temp.getBookmark(bookmark.title()).delete()
         elif "Tiny Mix Tapes" in bookmark.title():
             if "Music Review" in bookmark.title():
-                pass
-                # print("Album (TMT): {}".format(bookmark.title()))
+                print(processAlbumsTMT(bookmark.title(), bookmarksSinceDate))
                 # Add to albums / Add to music to keep in mind *year*
                 # Add to TMT reviews
             else:
