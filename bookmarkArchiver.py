@@ -23,19 +23,7 @@ class ChromeExtension(Chrome):
             .getFolder('Journalism')
             .getFolder('Articles to Read')
             .getFolder('TMT Reviews (To Read)'))
-        self.youtubeUrls, self.bookmarksSinceDate = self.parseBookmarkList(date)
 
-    def parseBookmarkList(self, date):
-        youtubeUrls = {}
-        bookmarksSinceDate = {}
-        givenDate = datetime(2019, 5, 15) #TODO: Hardcoded
-        for url in chrome_bookmarks.urls:
-            if "YouTube" in url.name:
-                youtubeUrls[url.name] = url.url
-            if (url.added > givenDate.replace(tzinfo=timezone.utc) and 
-            ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
-                bookmarksSinceDate[url.name] = url.url
-        return youtubeUrls, bookmarksSinceDate
 
 def getFolderCheck(locationFolder, title):
     folder = locationFolder.getFolder(title)
@@ -44,12 +32,12 @@ def getFolderCheck(locationFolder, title):
         folder = locationFolder.getFolder(title)
     return folder
 
-def processPitchforkAlbum(bookmarkTitle, bookmarksSinceDate):
+def processPitchforkAlbum(bookmark):
     albumList = []
     titleSearch = (re.search(
-        '(.+): (.+) Album Review \| Pitchfork', bookmarkTitle))
+        '(.+): (.+) Album Review \| Pitchfork', bookmark.title()))
     artistName = titleSearch.group(1)
-    page = requests.get(bookmarksSinceDate[bookmarkTitle])
+    page = requests.get(bookmark.URL())
     tree = html.fromstring(page.content)
     years = tree.xpath(
         '//span[@class="single-album-tombstone__meta-year"]/text()[4]')
@@ -74,12 +62,12 @@ def processPitchforkAlbum(bookmarkTitle, bookmarksSinceDate):
         })
     return albumList
 
-def processPitchforkSong(bookmarkTitle, bookmarksSinceDate):
+def processPitchforkSong(bookmark):
     titleSearch = (re.search(
-        '(“.+”( \[.+\])?) by (.+) Review \| Pitchfork', bookmarkTitle))
+        '(“.+”( \[.+\])?) by (.+) Review \| Pitchfork', bookmark.title()))
     songName = titleSearch.group(1).replace('“', '').replace('”', '')
     artistName = titleSearch.group(3)
-    page = requests.get(bookmarksSinceDate[bookmarkTitle])
+    page = requests.get(bookmark.URL())
     tree = html.fromstring(page.content)
     songElement = {
         "type": "song",
@@ -88,12 +76,12 @@ def processPitchforkSong(bookmarkTitle, bookmarksSinceDate):
     }
     return songElement
 
-def processTMTAlbum(bookmarkTitle, bookmarksSinceDate):
+def processTMTAlbum(bookmark):
     titleSearch = (re.search(
-        '(.+) - (.+) \| Music Review \| Tiny Mix\xa0Tapes', bookmarkTitle))
+        '(.+) - (.+) \| Music Review \| Tiny Mix\xa0Tapes', bookmark.title()))
     artistName = titleSearch.group(1)
     albumName = titleSearch.group(2)
-    page = requests.get(bookmarksSinceDate[bookmarkTitle])
+    page = requests.get(bookmark.URL())
     tree = html.fromstring(page.content)
     years = tree.xpath(
         '//p[@class="meta"]/text()')
@@ -106,50 +94,50 @@ def processTMTAlbum(bookmarkTitle, bookmarksSinceDate):
     }
     return albumElement
 
-def processPitchfork(bookmarkTitle, chrome):
-    if "Album Review" in bookmarkTitle:
-            return processPitchforkAlbum(bookmarkTitle, chrome.bookmarksSinceDate)
-        # chrome.temp.getBookmark(bookmarkTitle).delete() #TODO: uncomment all delete
-    elif "Review" in bookmarkTitle:
-            return processPitchforkSong(bookmarkTitle, chrome.bookmarksSinceDate)
-        # chrome.temp.getBookmark(bookmarkTitle).delete()
+def processPitchfork(bookmark, chrome):
+    if "Album Review" in bookmark.title():
+        return processPitchforkAlbum(bookmark)
+        # chrome.temp.getBookmark(bookmark).delete() #TODO: uncomment all delete
+    elif "Review" in bookmark.title():
+        return processPitchforkSong(bookmark)
+        # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = chrome.temp.getFolderCheck('Discovery (Music)')
-        discoveryMusic.addBookmark(
-            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
-        # chrome.temp.getBookmark(bookmarkTitle).delete()
+        discoveryMusic = getFolderCheck(chrome.temp, 'Discovery (Music)')
+        discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
+        return None
+        # chrome.temp.getBookmark(bookmark.title()).delete()
 
-def processTMT(bookmarkTitle, chrome):
-    if "Music Review" in bookmarkTitle:
-        chrome.tmtReviews.addBookmark(
-            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
-        return processTMTAlbum(bookmarkTitle, chrome.bookmarksSinceDate)
-        # chrome.temp.getBookmark(bookmarkTitle).delete()
+def processTMT(bookmark, chrome):
+    if "Music Review" in bookmark.title():
+        chrome.tmtReviews.addBookmark(bookmark.title(), bookmark.URL())
+        return processTMTAlbum(bookmark)
+        # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = chrome.temp.getFolderCheck('Discovery (Music)')
-        discoveryMusic.addBookmark(
-            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
-        # chrome.temp.getBookmark(bookmarkTitle).delete()
+        discoveryMusic = getFolderCheck(chrome.temp, 'Discovery (Music)')
+        discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
+        return None
+        # chrome.temp.getBookmark(bookmark.title()).delete()
 
-def processYouTube(bookmarkTitle, chrome):
-    youtubeFolder = chrome.temp.getFolderCheck('YouTube') #TODO: look into adding this to ChromeBookmarkEditor
-    youtubeFolder.addBookmark(bookmarkTitle, chrome.youtubeUrls[bookmarkTitle])
-    # chrome.temp.getBookmark(bookmarkTitle).delete()
+def processYouTube(bookmark, chrome):
+    youtubeFolder = getFolderCheck(chrome.temp, 'YouTube') #TODO: look into adding this to ChromeBookmarkEditor
+    youtubeFolder.addBookmark(bookmark.title(), bookmark.URL())
+    return None
+    # chrome.temp.getBookmark(bookmark.title()).delete()
 
-def processBookmarkThread(bookmarkTitle, chrome):
-    if "Pitchfork" in bookmarkTitle:
-        return processPitchfork(bookmarkTitle, chrome)
-    elif "Tiny Mix\xa0Tapes" in bookmarkTitle:
-        return processTMT(bookmarkTitle, chrome)
-    elif "YouTube" in bookmarkTitle:
-        processYouTube(bookmarkTitle, chrome)
+def processBookmarkThread(bookmark, chrome):
+    if "Pitchfork" in bookmark.title():
+        return processPitchfork(bookmark, chrome)
+    elif "Tiny Mix\xa0Tapes" in bookmark.title():
+        return processTMT(bookmark, chrome)
+    elif "YouTube" in bookmark.title():
+        return processYouTube(bookmark, chrome)
 
 def bookmarkArchiver(year):
     elementList = []
     elementNo = 0
     chrome = ChromeExtension(year)
     for bookmark in chrome.temp.bookmarks:
-        element = processBookmarkThread(bookmark.title(), chrome)
+        element = processBookmarkThread(bookmark, chrome)
         if type(element) is list:
             elementList.extend(element)
         elif type(element) is dict:
@@ -157,7 +145,7 @@ def bookmarkArchiver(year):
         elementNo += 1
         print(elementNo)
         # threads = []
-        # thread = threading.Thread(target=processBookmarkThread, args=(bookmark, bookmarksSinceDate, youtubeUrls))
+        # thread = threading.Thread(target=processBookmarkThread, args=(bookmark, chrome))
         # thread.daemon = True
         # threads.append(thread)
         # thread.start()
