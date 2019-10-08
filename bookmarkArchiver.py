@@ -12,17 +12,30 @@ import chrome_bookmarks
 from lxml import html
 from ChromeBookmarkEditor import Chrome
 
-def parseBookmarkList(date):
-    youtubeUrls = {}
-    bookmarksSinceDate = {}
-    givenDate = datetime(2019, 5, 15) #TODO: Hardcoded
-    for url in chrome_bookmarks.urls:
-        if "YouTube" in url.name:
-            youtubeUrls[url.name] = url.url
-        if (url.added > givenDate.replace(tzinfo=timezone.utc) and 
-           ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
-            bookmarksSinceDate[url.name] = url.url
-    return youtubeUrls, bookmarksSinceDate
+class ChromeExtension(Chrome):
+
+    def __init__(self, date):
+        super().__init__()
+        self.temp = self.otherBookmarks.getFolder('temp')
+        self.tmtReviews = (self.otherBookmarks
+            .getFolder('Personal')
+            .getFolder('Culture')
+            .getFolder('Journalism')
+            .getFolder('Articles to Read')
+            .getFolder('TMT Reviews (To Read)'))
+        self.youtubeUrls, self.bookmarksSinceDate = self.parseBookmarkList(date)
+
+    def parseBookmarkList(self, date):
+        youtubeUrls = {}
+        bookmarksSinceDate = {}
+        givenDate = datetime(2019, 5, 15) #TODO: Hardcoded
+        for url in chrome_bookmarks.urls:
+            if "YouTube" in url.name:
+                youtubeUrls[url.name] = url.url
+            if (url.added > givenDate.replace(tzinfo=timezone.utc) and 
+            ("Pitchfork" in url.name or "Tiny Mix\xa0Tapes" in url.name)):
+                bookmarksSinceDate[url.name] = url.url
+        return youtubeUrls, bookmarksSinceDate
 
 def getFolderCheck(locationFolder, title):
     folder = locationFolder.getFolder(title)
@@ -93,58 +106,50 @@ def processTMTAlbum(bookmarkTitle, bookmarksSinceDate):
     }
     return albumElement
 
-def processPitchfork(bookmarkTitle, bookmarksSinceDate, temp):
+def processPitchfork(bookmarkTitle, chrome):
     if "Album Review" in bookmarkTitle:
-            return processPitchforkAlbum(bookmarkTitle, bookmarksSinceDate)
-        # temp.getBookmark(bookmarkTitle).delete() #TODO: uncomment all delete
+            return processPitchforkAlbum(bookmarkTitle, chrome.bookmarksSinceDate)
+        # chrome.temp.getBookmark(bookmarkTitle).delete() #TODO: uncomment all delete
     elif "Review" in bookmarkTitle:
-            return processPitchforkSong(bookmarkTitle, bookmarksSinceDate)
-        # temp.getBookmark(bookmarkTitle).delete()
+            return processPitchforkSong(bookmarkTitle, chrome.bookmarksSinceDate)
+        # chrome.temp.getBookmark(bookmarkTitle).delete()
     else:
-        discoveryMusic = getFolderCheck(temp, 'Discovery (Music)')
+        discoveryMusic = chrome.temp.getFolderCheck('Discovery (Music)')
         discoveryMusic.addBookmark(
-            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
-        # temp.getBookmark(bookmarkTitle).delete()
+            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
+        # chrome.temp.getBookmark(bookmarkTitle).delete()
 
-def processTMT(bookmarkTitle, bookmarksSinceDate, tmtReviews, temp):
+def processTMT(bookmarkTitle, chrome):
     if "Music Review" in bookmarkTitle:
-        tmtReviews.addBookmark(
-            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
-        return processTMTAlbum(bookmarkTitle, bookmarksSinceDate)
-        # temp.getBookmark(bookmarkTitle).delete()
+        chrome.tmtReviews.addBookmark(
+            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
+        return processTMTAlbum(bookmarkTitle, chrome.bookmarksSinceDate)
+        # chrome.temp.getBookmark(bookmarkTitle).delete()
     else:
-        discoveryMusic = getFolderCheck(temp, 'Discovery (Music)')
+        discoveryMusic = chrome.temp.getFolderCheck('Discovery (Music)')
         discoveryMusic.addBookmark(
-            bookmarkTitle, bookmarksSinceDate[bookmarkTitle])
-        # temp.getBookmark(bookmarkTitle).delete()
+            bookmarkTitle, chrome.bookmarksSinceDate[bookmarkTitle])
+        # chrome.temp.getBookmark(bookmarkTitle).delete()
 
-def processYouTube(bookmarkTitle, youtubeUrls, temp):
-    youtubeFolder = getFolderCheck(temp, 'YouTube') #TODO: look into adding this to ChromeBookmarkEditor
-    youtubeFolder.addBookmark(bookmarkTitle, youtubeUrls[bookmarkTitle])
-    # temp.getBookmark(bookmarkTitle).delete()
+def processYouTube(bookmarkTitle, chrome):
+    youtubeFolder = chrome.temp.getFolderCheck('YouTube') #TODO: look into adding this to ChromeBookmarkEditor
+    youtubeFolder.addBookmark(bookmarkTitle, chrome.youtubeUrls[bookmarkTitle])
+    # chrome.temp.getBookmark(bookmarkTitle).delete()
 
-def processBookmarkThread(bookmarkTitle, bookmarksSinceDate, youtubeUrls, temp, tmtReviews):
+def processBookmarkThread(bookmarkTitle, chrome):
     if "Pitchfork" in bookmarkTitle:
-        return processPitchfork(bookmarkTitle, bookmarksSinceDate, temp)
+        return processPitchfork(bookmarkTitle, chrome)
     elif "Tiny Mix\xa0Tapes" in bookmarkTitle:
-        return processTMT(bookmarkTitle, bookmarksSinceDate, tmtReviews, temp)
+        return processTMT(bookmarkTitle, chrome)
     elif "YouTube" in bookmarkTitle:
-        processYouTube(bookmarkTitle, youtubeUrls, temp)
+        processYouTube(bookmarkTitle, chrome)
 
 def bookmarkArchiver(year):
     elementList = []
     elementNo = 0
-    youtubeUrls, bookmarksSinceDate = parseBookmarkList(year)
-    chrome = Chrome()
-    temp = chrome.otherBookmarks.getFolder('temp')
-    tmtReviews = (chrome.otherBookmarks
-            .getFolder('Personal')
-            .getFolder('Culture')
-            .getFolder('Journalism')
-            .getFolder('Articles to Read')
-            .getFolder('TMT Reviews (To Read)'))
-    for bookmark in temp.bookmarks:
-        element = processBookmarkThread(bookmark.title(), bookmarksSinceDate, youtubeUrls, temp, tmtReviews) #TODO: Look into OOP and minimizing the parameters here
+    chrome = ChromeExtension(year)
+    for bookmark in chrome.temp.bookmarks:
+        element = processBookmarkThread(bookmark.title(), chrome)
         if type(element) is list:
             elementList.extend(element)
         elif type(element) is dict:
