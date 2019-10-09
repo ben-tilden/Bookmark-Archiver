@@ -37,13 +37,25 @@ class Folder(ChromeApp):
 	def delete(self):
 		self.root.delete()
 
+	def isFolder(self, title):
+		if self.getFolder(title) == None:
+			return False
+		else:
+			return True
+
+	def isBookmark(self, title):
+		if self.getBookmark(title) == None:
+			return False
+		else:
+			return True
+
 	def getFolder(self, title):
 		for folder in self.folders:
 			if str(folder.title()) == title:
 				return Folder(folder)
 		return None
 
-	def getNewFolder(self, title):
+	def getFolderUnsure(self, title):
 		folder = self.getFolder(title)
 		if folder == None:
 			self.addFolder(title)

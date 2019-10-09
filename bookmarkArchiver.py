@@ -6,8 +6,9 @@
 
 import re
 import threading
-from datetime import datetime, timezone
 import requests
+from multiprocessing.pool import ThreadPool
+from datetime import datetime, timezone
 from lxml import html
 from ChromeBookmarkEditor import Chrome
 
@@ -94,29 +95,30 @@ def processPitchfork(bookmark, chrome):
         return processPitchforkSong(bookmark)
         # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = chrome.temp.getNewFolder('Discovery (Music)')
+        discoveryMusic = chrome.temp.getFolderUnsure('Discovery (Music)')
         discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
         return None
         # chrome.temp.getBookmark(bookmark.title()).delete()
 
 def processTMT(bookmark, chrome):
     if "Music Review" in bookmark.title():
-        chrome.tmtReviews.addBookmark(bookmark.title(), bookmark.URL())
+        if not chrome.tmtReviews.isBookmark(bookmark.title()):
+            chrome.tmtReviews.addBookmark(bookmark.title(), bookmark.URL())
         return processTMTAlbum(bookmark)
         # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = chrome.temp.getNewFolder('Discovery (Music)')
+        discoveryMusic = chrome.temp.getFolderUnsure('Discovery (Music)')
         discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
         return None
         # chrome.temp.getBookmark(bookmark.title()).delete()
 
 def processYouTube(bookmark, chrome):
-    youtubeFolder = chrome.temp.getNewFolder('YouTube')
+    youtubeFolder = chrome.temp.getFolderUnsure('YouTube')
     youtubeFolder.addBookmark(bookmark.title(), bookmark.URL())
     return None
     # chrome.temp.getBookmark(bookmark.title()).delete()
 
-def processBookmarkThread(bookmark, chrome):
+def processBookmark(bookmark, chrome):
     if "Pitchfork" in bookmark.title():
         return processPitchfork(bookmark, chrome)
     elif "Tiny Mix\xa0Tapes" in bookmark.title():
@@ -124,27 +126,25 @@ def processBookmarkThread(bookmark, chrome):
     elif "YouTube" in bookmark.title():
         return processYouTube(bookmark, chrome)
 
-def bookmarkArchiver(year):
+def addElementToList(bookmark, chrome, elementList):
+    element = processBookmark(bookmark, chrome)
+    if type(element) is list:
+        elementList.extend(element)
+    elif type(element) is dict:
+        elementList.append(element)
+
+def getElementList(chrome):
     elementList = []
-    elementNo = 0
-    chrome = ChromeExtension(year)
+    pool = ThreadPool()
     for bookmark in chrome.temp.bookmarks:
-        element = processBookmarkThread(bookmark, chrome)
-        if type(element) is list:
-            elementList.extend(element)
-        elif type(element) is dict:
-            elementList.append(element)
-        elementNo += 1
-        print(elementNo)
-        # threads = []
-        # thread = threading.Thread(target=processBookmarkThread, args=(bookmark, chrome))
-        # thread.daemon = True
-        # threads.append(thread)
-        # thread.start()
-        # for x in threads
-        #     x.join()
-        # [x.join() for x in threads]
-    print(elementList)
+        pool.apply_async(addElementToList, (bookmark, chrome, elementList))
+    pool.close()
+    pool.join()
+    return elementList
+
+def bookmarkArchiver(year):
+    chrome = ChromeExtension(year)
+    elementList = getElementList(chrome)
     with open('/Users/bentilden/Library/Mobile Documents/'
              '27N4MQEA55~pro~writer/Documents/temp.txt', 'a+') as f:
         for element in elementList:
