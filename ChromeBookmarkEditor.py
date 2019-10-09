@@ -43,6 +43,13 @@ class Folder(ChromeApp):
 				return Folder(folder)
 		return None
 
+	def getNewFolder(self, title):
+		folder = self.getFolder(title)
+		if folder == None:
+			self.addFolder(title)
+			folder = self.getFolder(title)
+		return folder
+
 	def getBookmark(self, title):
 		for bookmark in self.bookmarks:
 			if str(bookmark.title()) == title:

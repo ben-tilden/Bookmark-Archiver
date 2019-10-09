@@ -8,7 +8,6 @@ import re
 import threading
 from datetime import datetime, timezone
 import requests
-import chrome_bookmarks
 from lxml import html
 from ChromeBookmarkEditor import Chrome
 
@@ -24,13 +23,6 @@ class ChromeExtension(Chrome):
             .getFolder('Articles to Read')
             .getFolder('TMT Reviews (To Read)'))
 
-
-def getFolderCheck(locationFolder, title):
-    folder = locationFolder.getFolder(title)
-    if folder == None:
-        locationFolder.addFolder(title)
-        folder = locationFolder.getFolder(title)
-    return folder
 
 def processPitchforkAlbum(bookmark):
     albumList = []
@@ -102,7 +94,7 @@ def processPitchfork(bookmark, chrome):
         return processPitchforkSong(bookmark)
         # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = getFolderCheck(chrome.temp, 'Discovery (Music)')
+        discoveryMusic = chrome.temp.getNewFolder('Discovery (Music)')
         discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
         return None
         # chrome.temp.getBookmark(bookmark.title()).delete()
@@ -113,13 +105,13 @@ def processTMT(bookmark, chrome):
         return processTMTAlbum(bookmark)
         # chrome.temp.getBookmark(bookmark.title()).delete()
     else:
-        discoveryMusic = getFolderCheck(chrome.temp, 'Discovery (Music)')
+        discoveryMusic = chrome.temp.getNewFolder('Discovery (Music)')
         discoveryMusic.addBookmark(bookmark.title(), bookmark.URL())
         return None
         # chrome.temp.getBookmark(bookmark.title()).delete()
 
 def processYouTube(bookmark, chrome):
-    youtubeFolder = getFolderCheck(chrome.temp, 'YouTube') #TODO: look into adding this to ChromeBookmarkEditor
+    youtubeFolder = chrome.temp.getNewFolder('YouTube')
     youtubeFolder.addBookmark(bookmark.title(), bookmark.URL())
     return None
     # chrome.temp.getBookmark(bookmark.title()).delete()
