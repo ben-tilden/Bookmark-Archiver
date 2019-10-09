@@ -10,7 +10,7 @@ import requests
 from lxml import html
 from datetime import datetime, timezone
 from multiprocessing.pool import ThreadPool
-from ChromeBookmarkEditor import Chrome
+from chromeBookmarkEditor import Chrome
 
 class ChromeExtension(Chrome):
 
