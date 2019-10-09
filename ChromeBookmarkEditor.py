@@ -72,17 +72,15 @@ class Folder(ChromeApp):
 		properties = dict(
 			title=title
 		)
-		new_folder = self.chrome.classForScriptingClass_("bookmark folder").alloc().initWithProperties_(properties)
-		self.folders.append(new_folder)
+		newFolder = self.chrome.classForScriptingClass_("bookmark folder").alloc().initWithProperties_(properties)
+		self.folders.append(newFolder)
+		return newFolder
 
 	def addBookmark(self, title, url):
 		properties = dict(
 			title=title,
 			URL=url
 		)
-		new_bookmark = self.chrome.classForScriptingClass_("bookmark item").alloc().initWithProperties_(properties)
-		self.bookmarks.append(new_bookmark)
-
-	def removeAll(self):
-		for item in (self.folders + self.bookmarks):
-			item.delete()
+		newBookmark = self.chrome.classForScriptingClass_("bookmark item").alloc().initWithProperties_(properties)
+		self.bookmarks.append(newBookmark)
+		return newBookmark
