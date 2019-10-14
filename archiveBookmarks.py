@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-# Program: bookmarkArchiver
+# Program: archiveBookmarks
 # Objective: Organize bookmarks and add music to ia Writer docs
 # Author: Ben Tilden
 
 import re
-import threading
 import requests
 from lxml import html
 from datetime import datetime, timezone
@@ -13,6 +12,7 @@ from multiprocessing.pool import ThreadPool
 from chromeBookmarkEditor import Chrome
 
 class ChromeExtension(Chrome):
+    """Extend Chrome to contain temp, TODO, and tmtReviews"""
 
     def __init__(self):
         super().__init__()
@@ -27,6 +27,7 @@ class ChromeExtension(Chrome):
 
 
 def processPitchforkAlbum(bookmark):
+    """Add Pitchfork album info to elementList"""
     albumList = []
     titleSearch = (re.search(
         r'(.+): (.+) Album Review \| Pitchfork', bookmark.title()))
@@ -41,10 +42,10 @@ def processPitchforkAlbum(bookmark):
         if albumNames != None:
             for x in range(0, len(albumNames)):
                 albumList.append({
+                    "type": "album",
                     "artist": artistName,
                     "title": albumNames[x],
-                    "year": years[x],
-                    "type": "album"
+                    "year": years[x]
                 })
     else:
         albumName = titleSearch.group(2)
@@ -57,6 +58,7 @@ def processPitchforkAlbum(bookmark):
     return albumList
 
 def processPitchforkSong(bookmark):
+    """Add Pitchfork song info to elementList"""
     titleSearch = (re.search(
         r'(“.+”( \[.+\])?) by (.+) Review \| Pitchfork', bookmark.title()))
     songName = titleSearch.group(1).replace('“', '').replace('”', '')
@@ -69,6 +71,7 @@ def processPitchforkSong(bookmark):
     return [songElement]
 
 def processTMTAlbum(bookmark):
+    """Add TMT album info to elementList"""
     titleSearch = (re.search(
         r'(.+) - (.+) \| Music Review \| Tiny Mix', bookmark.title()))
     artistName = titleSearch.group(1)
@@ -87,6 +90,7 @@ def processTMTAlbum(bookmark):
     return [albumElement]
 
 def processPitchfork(bookmark, chrome):
+    """Allocate Pitchfork bookmark to proper sorting"""
     if "Album Review" in bookmark.title():
         return processPitchforkAlbum(bookmark)
     elif "Review" in bookmark.title():
@@ -97,6 +101,7 @@ def processPitchfork(bookmark, chrome):
         return []
 
 def processTMT(bookmark, chrome):
+    """Allocate TMT bookmark to proper sorting"""
     if "Music Review" in bookmark.title():
         if not chrome.tmtReviews.isBookmark(bookmark.title()):
             chrome.tmtReviews.addBookmark(bookmark.title(), bookmark.URL())
@@ -107,11 +112,13 @@ def processTMT(bookmark, chrome):
         return []
 
 def processYouTube(bookmark, chrome):
+    """Add YouTube bookmark to YouTube folder"""
     youtubeFolder = chrome.temp.getFolderUnsure('YouTube')
     youtubeFolder.addBookmark(bookmark.title(), bookmark.URL())
     return []
 
 def processBookmark(bookmark, chrome):
+    """Allocate temp bookmark to proper sorting"""
     if "Pitchfork" in bookmark.title():
         return processPitchfork(bookmark, chrome)
     elif ("Tiny Mix\xa0Tapes" in bookmark.title()
@@ -122,6 +129,7 @@ def processBookmark(bookmark, chrome):
     return None
 
 def addElementToList(bookmark, chrome, elementList):
+    """Add element extracted from bookmark to list"""
     element = processBookmark(bookmark, chrome)
     if element != None:
         elementList.extend(element)
@@ -129,6 +137,7 @@ def addElementToList(bookmark, chrome, elementList):
         chrome.TODO.addBookmark(bookmark.title(), bookmark.URL())
 
 def getElementList(chrome):
+    """Use threadpool to organize bookmarks and extract data"""
     elementList = []
     pool = ThreadPool()
     for bookmark in chrome.temp.bookmarks:
@@ -141,7 +150,8 @@ def getElementList(chrome):
     chrome.temp = chrome.otherBookmarks.addFolder('temp')
     return elementList
 
-def bookmarkArchiver():
+def archiveBookmarks():
+    """Archive bookmarks and write song and album data to temp.txt"""
     chrome = ChromeExtension()
     elementList = getElementList(chrome)
     with open('/Users/bentilden/Library/Mobile Documents/'
@@ -150,4 +160,4 @@ def bookmarkArchiver():
             f.write('\t'.join(value for key, value in element.items()) + '\n')
 
 if __name__ == "__main__":
-    bookmarkArchiver()
+    archiveBookmarks()
