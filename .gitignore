@@ -6,3 +6,4 @@ zipPrivate.py
 __pycache__
 .Python
 archiver.sh
+pyvenv.cfg
