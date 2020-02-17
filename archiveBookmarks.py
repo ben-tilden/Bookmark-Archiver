@@ -30,7 +30,7 @@ def processPitchforkAlbum(bookmark):
     """Add Pitchfork album info to elementList"""
     albumList = []
     titleSearch = (re.search(
-        r'(.+): (.+) Album Review \| Pitchfork', bookmark.title()))
+        r'(.+?): (.+) Album Review \| Pitchfork', bookmark.title()))
     artistName = titleSearch.group(1)
     page = requests.get(bookmark.URL())
     tree = html.fromstring(page.content)
@@ -42,18 +42,24 @@ def processPitchforkAlbum(bookmark):
         if albumNames != None:
             for x in range(0, len(albumNames)):
                 albumList.append({
-                    "type": "album",
-                    "artist": artistName,
+                    "type": "music",
                     "title": albumNames[x],
-                    "year": years[x]
+                    "artist": artistName,
+                    "discipline": "album",
+                    "year": years[x],
+                    "star": "",
+                    "listenedThrough": "false"
                 })
     else:
         albumName = titleSearch.group(2)
         albumList.append({
-            "type": "album",
-            "artist": artistName,
+            "type": "music",
             "title": albumName,
-            "year": years[0]
+            "artist": artistName,
+            "discipline": "album",
+            "year": years[0],
+            "star": "",
+            "listenedThrough": "false"
         })
     return albumList
 
@@ -64,9 +70,11 @@ def processPitchforkSong(bookmark):
     songName = titleSearch.group(1).replace('“', '').replace('”', '')
     artistName = titleSearch.group(3)
     songElement = {
-        "type": "song",
+        "type": "music",
+        "title": songName,
         "artist": artistName,
-        "title": songName
+        "discipline": "song",
+        "year": int(datetime.datetime.now().year)
     }
     return [songElement]
 
@@ -82,10 +90,13 @@ def processTMTAlbum(bookmark):
         '//p[@class="meta"]/text()')
     yearName = re.search('.+; (.+)]', years[0]).group(1)
     albumElement = {
-        "type": "album",
-        "artist": artistName,
+        "type": "music",
         "title": albumName,
-        "year": yearName
+        "artist": artistName,
+        "discipline": "album",
+        "year": yearName,
+        "star": "",
+        "listenedThrough": "false"
     }
     return [albumElement]
 
@@ -145,9 +156,9 @@ def getElementList(chrome):
             addElementToList, (bookmark, chrome, elementList))
     pool.close()
     pool.join()
-    chrome.temp.delete()
+    # chrome.temp.delete()
     # chrome.temp is now equal to the folder previously located below it
-    chrome.temp = chrome.otherBookmarks.addFolder('temp')
+    # chrome.temp = chrome.otherBookmarks.addFolder('temp')
     return elementList
 
 def archiveBookmarks():
